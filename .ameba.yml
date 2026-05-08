@@ -1,0 +1,13 @@
+Lint/UselessAssign:
+  Excluded:
+    - src/prof/c/execinfo.cr
+    - src/prof/c/itimer.cr
+    - src/prof/c/libunwind.cr
+  Enabled: true
+  Severity: Warning
+
+Lint/NotNil:
+  Excluded:
+    - spec/
+  Enabled: true
+  Severity: Warning

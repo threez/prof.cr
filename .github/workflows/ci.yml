@@ -1,0 +1,37 @@
+on:
+  push:
+  pull_request:
+    branches: [master]
+
+jobs:
+  verify-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download source
+        uses: actions/checkout@v4
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+      - name: Install development dependencies
+        run: shards install
+      - name: Run linter and tests
+        run: make lint spec
+      - name: Type-check library
+        run: make build
+      - name: Check formatting
+        run: crystal tool format --check
+
+  verify-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Download source
+        uses: actions/checkout@v4
+      - name: Install Crystal
+        uses: crystal-lang/install-crystal@v1
+      - name: Install development dependencies
+        run: shards install
+      - name: Run linter and tests
+        run: make lint spec
+      - name: Type-check library
+        run: make build
+      - name: Check formatting
+        run: crystal tool format --check

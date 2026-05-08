@@ -1,0 +1,15 @@
+name: prof
+version: 0.1.0
+description: A sampling CPU profiler for Crystal programs
+
+authors:
+  - Vincent Landgraf <vincent@landgrafx.de>
+
+crystal: '>= 1.19.1'
+
+development_dependencies:
+  ameba:
+    github: crystal-ameba/ameba
+    version: ~> 1.6.0
+
+license: MIT
