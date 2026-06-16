@@ -21,7 +21,7 @@ require "./prof/report"
 # puts report # prints top-10 hottest frames
 # ```
 module Prof
-  VERSION = "0.1.0"
+  VERSION = "0.1.1"
 
   # Starts the profiler. See `Profiler.start` for parameter documentation.
   # Raises if the profiler is already running.

@@ -1,5 +1,8 @@
 require "./frame"
 require "c/dlfcn"
+{% if flag?(:freebsd) %}
+  require "c/sysctl"
+{% end %}
 
 module Prof
   # :nodoc:
@@ -92,6 +95,15 @@ module Prof
         # process refers to that child's binary, not ours.
         path = "/proc/#{Process.pid}/exe"
         File.symlink?(path) ? path : nil
+      {% elsif flag?(:freebsd) %}
+        # FreeBSD has no /proc by default, so query the kernel directly via
+        # sysctl(CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1), the same call
+        # the runtime linker and procstat(1) use to find the current binary.
+        mib = StaticArray[LibC::CTL_KERN, LibC::KERN_PROC, LibC::KERN_PROC_PATHNAME, -1]
+        buf = Bytes.new(1024)
+        len = LibC::SizeT.new(buf.size)
+        ret = LibC.sysctl(mib.to_unsafe, 4_u32, buf.to_unsafe, pointerof(len), nil, 0)
+        ret == 0 && len > 1 ? String.new(buf[0, len.to_i - 1]) : nil
       {% elsif flag?(:darwin) %}
         # macOS does not have /proc; use _NSGetExecutablePath via libc.
         buf = Bytes.new(4096)
