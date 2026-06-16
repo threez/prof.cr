@@ -8,15 +8,13 @@ stopping, addresses are resolved to symbol names and the result is a
 
 ## Platform support
 
-| Platform | Stack unwinding | Symbol resolution |
-|---|---|---|
-| macOS | `backtrace(3)` (libSystem) | `backtrace_symbols(3)` — full Crystal method names |
-| Linux (glibc) | `backtrace(3)` (glibc) | `backtrace_symbols(3)` — full Crystal method names |
-| Linux (musl) | **not supported** | — |
-| FreeBSD | libunwind | `dladdr(3)` — type name only |
-| Solaris | libunwind | `dladdr(3)` — type name only |
-| QNX | libunwind | `dladdr(3)` — type name only |
-| HP-UX | libunwind | `dladdr(3)` — type name only |
+- **macOS** — `backtrace(3)` (libSystem) / `backtrace_symbols(3)` — full Crystal method names
+- **Linux (glibc)** — `backtrace(3)` (glibc) / `backtrace_symbols(3)` — full Crystal method names
+- **Linux (musl)** — **not supported**
+- **FreeBSD** — libunwind / `dladdr(3)` — type name only
+- **Solaris** — libunwind / `dladdr(3)` — type name only
+- **QNX** — libunwind / `dladdr(3)` — type name only
+- **HP-UX** — libunwind / `dladdr(3)` — type name only
 
 `ITIMER_PROF` fires on CPU time (user + kernel), so sleeping or waiting on I/O
 does not accumulate samples.
@@ -98,10 +96,8 @@ end
 
 ### Exporting
 
-| Method | Format | Viewer |
-|---|---|---|
-| `report.to_speedscope("out.json")` | speedscope sampled profile | [speedscope.app](https://www.speedscope.app) |
-| `report.to_folded("out.folded")` | folded stacks | `flamegraph.pl` or speedscope import |
+- `report.to_speedscope("out.json")` — speedscope sampled profile; open at [speedscope.app](https://www.speedscope.app)
+- `report.to_folded("out.folded")` — folded stacks; pipe to `flamegraph.pl` or import into speedscope
 
 Both methods also accept an `IO` instead of a path.
 
