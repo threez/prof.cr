@@ -31,7 +31,7 @@ module Prof
       # known in-binary address (a pointer to this very method) so dladdr is
       # certain to return the main executable's dli_fbase and not a .so base.
       # Returns nil if dladdr fails; skip resolution rather than pass wrong addresses.
-      load_base = self_load_base
+      load_base = self_load_base(binary)
       return result unless load_base
 
       # Process in batches to avoid hitting ARG_MAX with large address sets.
@@ -41,7 +41,7 @@ module Prof
         output = IO::Memory.new
         status = Process.run(
           "addr2line",
-          args: ["-e", binary, "-f", "-C", "--"] + hex_batch,
+          args: ["-e", binary, "-f", "-C"] + hex_batch,
           output: output,
           error: Process::Redirect::Close
         )
@@ -75,15 +75,40 @@ module Prof
     # Uses a class variable (guaranteed to reside in the main binary's .bss)
     # as the anchor address for dladdr so dli_fbase is the executable's ASLR
     # base and not the base of a dynamically-loaded shared library.
-    # For PIE binaries: file_virtual_address = runtime_address - load_base.
+    # For PIE (ET_DYN) binaries: file_virtual_address = runtime_address - load_base.
+    # For non-PIE (ET_EXEC) binaries dli_fbase is just the first PT_LOAD segment's
+    # own link-time vaddr (e.g. 0x200000) -- there is no ASLR bias to strip, since
+    # runtime addresses already equal file-relative vaddrs, so load_base must be 0.
+    # Crystal produces ET_EXEC binaries on FreeBSD (confirmed via readelf -h), so
+    # this distinction matters there; subtracting dli_fbase unconditionally makes
+    # every address resolve to the wrong (or no) source line.
     @@_anchor : UInt8 = 0_u8
 
-    private def self.self_load_base : UInt64?
+    private def self.self_load_base(binary : String) : UInt64?
       info = uninitialized LibC::DlInfo
       anchor_ptr = pointerof(@@_anchor).as(Void*)
       return nil if LibC.dladdr(anchor_ptr, pointerof(info)) == 0
-      info.dli_fbase.address
+      {% if flag?(:linux) || flag?(:freebsd) %}
+        pie_executable?(binary) ? info.dli_fbase.address : 0_u64
+      {% else %}
+        info.dli_fbase.address
+      {% end %}
     end
+
+    {% if flag?(:linux) || flag?(:freebsd) %}
+      # Reads the ELF header's e_type field directly: ET_DYN (3) means PIE,
+      # ET_EXEC (2) means a fixed-address, non-relocated executable.
+      private def self.pie_executable?(binary : String) : Bool
+        File.open(binary) do |f|
+          header = Bytes.new(18)
+          return false unless f.read_fully?(header)
+          e_type = header[16].to_u16 | (header[17].to_u16 << 8)
+          e_type == 3_u16 # ET_DYN
+        end
+      rescue
+        false
+      end
+    {% end %}
 
     private def self.self_exe : String?
       {% if flag?(:linux) %}

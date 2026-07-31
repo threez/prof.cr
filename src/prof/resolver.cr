@@ -1,13 +1,13 @@
 require "./frame"
 require "c/dlfcn"
-{% if flag?(:darwin) || flag?(:linux) %}
+{% if flag?(:darwin) || flag?(:linux) || flag?(:freebsd) %}
   require "./c/execinfo"
 {% end %}
 
 module Prof
   # :nodoc:
   module Resolver
-    {% if flag?(:darwin) || flag?(:linux) %}
+    {% if flag?(:darwin) || flag?(:linux) || flag?(:freebsd) %}
       SKIP = 3 # backtrace() itself + signal handler + OS trampoline
     {% else %}
       SKIP = 2 # signal handler + OS trampoline (libunwind starts inside the handler)
@@ -20,7 +20,7 @@ module Prof
       max_depth : Int32,
       skip : Int32 = SKIP,
     ) : Array(Array(Frame))
-      {% if flag?(:darwin) || flag?(:linux) %}
+      {% if flag?(:darwin) || flag?(:linux) || flag?(:freebsd) %}
         # First pass: collect unique addresses for a single batch backtrace_symbols
         # call instead of one call per sample (O(samples) → O(unique_addresses)).
         ordered_addrs = [] of UInt64
@@ -107,16 +107,24 @@ module Prof
     # instruction offset so all samples at different sites within the same
     # function are merged under one name.
     #
-    # macOS: "N   binary   0xADDR   sym + offset"  → "sym"
-    # Linux: "binary(sym+0xOFF) [0xADDR]"          → "sym"
+    # macOS:   "N   binary   0xADDR   sym + offset"  → "sym"
+    # Linux:   "binary(sym+0xOFF) [0xADDR]"          → "sym"
+    # FreeBSD: "0xADDR <sym+0xOFF> at /path/to/bin"  → "sym" (base-system
+    #          libexecinfo's own format — verified empirically against this
+    #          project's own libexecinfo.so.1, distinct from both of the
+    #          other two; NOT the glibc/Darwin shapes despite sharing their
+    #          backtrace()/backtrace_symbols() function signatures)
     #
     # Crystal symbol names contain parentheses (e.g. *Pointer(Bool)), so the
     # Linux format is parsed by finding the first "(" and the last ") [" rather
     # than with a greedy [^)]* pattern.
-    {% if flag?(:darwin) || flag?(:linux) %}
+    {% if flag?(:darwin) || flag?(:linux) || flag?(:freebsd) %}
       def self.clean_name(raw : String) : String
         name = if raw =~ /^\d+\s+\S+\s+0x\S+\s+(.+)$/
                  # macOS: strip leading columns
+                 $~[1]
+               elsif raw =~ /^0x\S+\s+<([^>]+)>\s+at\s+\S+$/
+                 # FreeBSD: extract the "sym+0xOFF" (or bare "sym") from <...>
                  $~[1]
                elsif raw.ends_with?("]") && (bi = raw.rindex(" ["))
                  # Linux: strip " [0xADDR]" suffix then extract symbol from parens.
@@ -143,10 +151,13 @@ module Prof
       end
     {% end %}
 
-    # Resolve a single address to a symbol name using dladdr(3).
+    # Resolve a single address to a symbol name using dladdr(3). Only used by
+    # the LibUnwind-based capture path above (now just Solaris and other
+    # non-Linux non-Darwin non-FreeBSD platforms) — Darwin/Linux/FreeBSD all
+    # use backtrace_symbols instead (see clean_name above).
     # The offset is omitted so all instruction sites in the same function share
     # one name and are aggregated together in top / speedscope / folded output.
-    {% unless flag?(:darwin) %}
+    {% unless flag?(:darwin) || flag?(:freebsd) %}
       private def self.resolve_via_dladdr(addr : UInt64) : String
         info = uninitialized LibC::DlInfo
         if LibC.dladdr(Pointer(Void).new(addr), pointerof(info)) != 0 && !info.dli_sname.null?

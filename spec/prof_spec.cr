@@ -17,8 +17,8 @@ end
 
 describe Prof::Resolver do
   describe "SKIP" do
-    it "is 3 on Darwin and Linux/glibc, 2 on other platforms" do
-      {% if flag?(:darwin) || flag?(:linux) %}
+    it "is 3 on Darwin, Linux/glibc, and FreeBSD; 2 on other platforms" do
+      {% if flag?(:darwin) || flag?(:linux) || flag?(:freebsd) %}
         Prof::Resolver::SKIP.should eq(3)
       {% else %}
         Prof::Resolver::SKIP.should eq(2)
