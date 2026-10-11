@@ -1,37 +1,53 @@
+name: CI
+
 on:
   push:
+    branches: [main]
   pull_request:
-    branches: [master]
 
 jobs:
-  verify-linux:
+  lint:
+    name: Lint & compile
     runs-on: ubuntu-latest
     steps:
-      - name: Download source
-        uses: actions/checkout@v4
-      - name: Install Crystal
-        uses: crystal-lang/install-crystal@v1
-      - name: Install development dependencies
-        run: shards install
-      - name: Run linter and tests
-        run: make lint spec
-      - name: Type-check library
-        run: make build
-      - name: Check formatting
+      - uses: actions/checkout@v4
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.20.2
+      - name: Cache shards
+        uses: actions/cache@v4
+        with:
+          path: lib
+          key: ${{ runner.os }}-shards-${{ hashFiles('shard.lock') }}
+          restore-keys: ${{ runner.os }}-shards-
+      - run: shards install
+      - name: Build ameba
+        run: cd lib/ameba && shards build ameba
+      - name: Format check
         run: crystal tool format --check
+      - name: Ameba lint
+        run: lib/ameba/bin/ameba
+      - name: Compile check
+        run: crystal build src/prof.cr -o /tmp/prof_check --no-codegen
 
-  verify-macos:
-    runs-on: macos-latest
+  test:
+    name: Test (${{ matrix.os }})
+    needs: lint
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Download source
-        uses: actions/checkout@v4
-      - name: Install Crystal
-        uses: crystal-lang/install-crystal@v1
-      - name: Install development dependencies
-        run: shards install
-      - name: Run linter and tests
-        run: make lint spec
-      - name: Type-check library
-        run: make build
-      - name: Check formatting
-        run: crystal tool format --check
+      - uses: actions/checkout@v4
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: 1.20.2
+      - name: Cache shards
+        uses: actions/cache@v4
+        with:
+          path: lib
+          key: ${{ runner.os }}-shards-${{ hashFiles('shard.lock') }}
+          restore-keys: ${{ runner.os }}-shards-
+      - run: shards install
+      - name: Run specs
+        run: crystal spec --order=random

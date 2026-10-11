@@ -36,39 +36,47 @@ module Prof
 
       # Process in batches to avoid hitting ARG_MAX with large address sets.
       addrs.each_slice(ADDR2LINE_BATCH) do |batch|
-        hex_batch = batch.map { |addr| addr < load_base ? "0x0" : "0x#{(addr - load_base).to_s(16)}" }
-
-        output = IO::Memory.new
-        status = Process.run(
-          "addr2line",
-          args: ["-e", binary, "-f", "-C"] + hex_batch,
-          output: output,
-          error: Process::Redirect::Close
-        )
-        next unless status.success?
-
-        lines = output.to_s.lines
-        batch.each_with_index do |addr, i|
-          # addr2line emits two lines per address: function name, then file:line
-          func_line = lines[i * 2]?
-          loc_line = lines[i * 2 + 1]?
-          next unless func_line && loc_line
-
-          loc = loc_line.strip
-          next if loc.starts_with?("??")
-
-          colon = loc.rindex(':')
-          next unless colon
-
-          file = loc[0...colon]
-          line = loc[colon + 1..].to_i?
-          next unless line && line > 0
-
-          result[addr] = {file, line}
-        end
+        resolve_batch(batch, binary, load_base, result)
       end
 
       result
+    end
+
+    # Resolves a single batch of addresses via addr2line and merges any
+    # resolved {file, line} pairs into *result*. Split out of `resolve` to
+    # keep its cyclomatic complexity down.
+    private def self.resolve_batch(batch : Array(UInt64), binary : String, load_base : UInt64,
+                                   result : Hash(UInt64, {String, Int32})) : Nil
+      hex_batch = batch.map { |addr| addr < load_base ? "0x0" : "0x#{(addr - load_base).to_s(16)}" }
+
+      output = IO::Memory.new
+      status = Process.run(
+        "addr2line",
+        args: ["-e", binary, "-f", "-C"] + hex_batch,
+        output: output,
+        error: Process::Redirect::Close
+      )
+      return unless status.success?
+
+      lines = output.to_s.lines
+      batch.each_with_index do |addr, i|
+        # addr2line emits two lines per address: function name, then file:line
+        func_line = lines[i * 2]?
+        loc_line = lines[i * 2 + 1]?
+        next unless func_line && loc_line
+
+        loc = loc_line.strip
+        next if loc.starts_with?("??")
+
+        colon = loc.rindex(':')
+        next unless colon
+
+        file = loc[0...colon]
+        line = loc[colon + 1..].to_i?
+        next unless line && line > 0
+
+        result[addr] = {file, line}
+      end
     end
 
     # Returns the runtime load base of the main executable.
@@ -87,7 +95,7 @@ module Prof
     private def self.self_load_base(binary : String) : UInt64?
       info = uninitialized LibC::DlInfo
       anchor_ptr = pointerof(@@_anchor).as(Void*)
-      return nil if LibC.dladdr(anchor_ptr, pointerof(info)) == 0
+      return if LibC.dladdr(anchor_ptr, pointerof(info)) == 0
       {% if flag?(:linux) || flag?(:freebsd) %}
         pie_executable?(binary) ? info.dli_fbase.address : 0_u64
       {% else %}
