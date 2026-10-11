@@ -102,9 +102,9 @@ describe Prof do
 
       it "at least one located frame references this spec file" do
         report = Prof.profile(interval: 1.millisecond) { busy_outer }
-        spec_frames = report.samples.flatten.select { |frame|
+        spec_frames = report.samples.flatten.select do |frame|
           frame.file.try(&.includes?("prof_spec.cr"))
-        }
+        end
         spec_frames.size.should be > 0
       end
     end

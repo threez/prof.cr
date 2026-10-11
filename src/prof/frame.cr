@@ -27,7 +27,7 @@ module Prof
     # Returns `"file:line"` when both are known, `"file"` when only the file
     # is known, or `nil` when no source location is available.
     def location : String?
-      return nil unless f = @file
+      return unless f = @file
       l = @line
       l ? "#{f}:#{l}" : f
     end
